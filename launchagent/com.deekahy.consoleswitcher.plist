@@ -7,8 +7,11 @@
 
     <key>ProgramArguments</key>
     <array>
-        <!-- Adjust this path if you installed the built binary somewhere else. -->
-        <string>/usr/local/bin/ConsoleSwitcher</string>
+        <!-- Must be the binary inside the .app bundle, not a bare copy
+             elsewhere — see the README for why that matters here. Adjust
+             this path if you installed the app somewhere other than
+             /Applications. -->
+        <string>/Applications/ConsoleSwitcher.app/Contents/MacOS/ConsoleSwitcher</string>
     </array>
 
     <key>RunAtLoad</key>

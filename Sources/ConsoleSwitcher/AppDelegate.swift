@@ -12,7 +12,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var activeRunningApp: NSRunningApplication?
     private var isSwitching = false
 
+    // Trigger is View+Menu held together, not the Xbox button: macOS
+    // reserves the Xbox button for its own overlay, and GeForce NOW
+    // separately grabs it for its own in-game menu while it has focus. A
+    // two-button chord is also just safer against accidental switches than
+    // a single button would be.
+    private var viewButtonPressed = false
+    private var menuButtonPressed = false
+    private var chordAlreadyFired = false
+
     func applicationDidFinishLaunching(_ notification: Notification) {
+        debugLog("ConsoleSwitcher: launched, pid=\(ProcessInfo.processInfo.processIdentifier)")
         NSApp.setActivationPolicy(.accessory) // background utility, no Dock icon
         setupStatusItem()
         setupControllerObservers()
@@ -59,6 +69,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Controller input
 
     private func setupControllerObservers() {
+        // Without this, GameController only delivers live button/axis
+        // events to the frontmost app. This app is deliberately never
+        // frontmost (accessory policy, no Dock icon, no window until the
+        // chooser appears) — so this is what lets it receive input at all
+        // while some other app has focus, which is the entire point of a
+        // background switcher.
+        GCController.shouldMonitorBackgroundEvents = true
+
         NotificationCenter.default.addObserver(
             self, selector: #selector(controllerConnected(_:)),
             name: .GCControllerDidConnect, object: nil
@@ -73,16 +91,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func configure(_ controller: GCController) {
-        guard let gamepad = controller.extendedGamepad else { return }
+        debugLog("ConsoleSwitcher: controller connected: vendor=\(controller.vendorName ?? "?") category=\(controller.productCategory)")
+        guard let gamepad = controller.extendedGamepad else {
+            debugLog("ConsoleSwitcher: controller has no extendedGamepad profile, cannot read buttons")
+            return
+        }
+
+        // Logs which physical button was pressed, by name, straight from
+        // the hardware — this is what made it possible to confirm the Xbox
+        // button never reaches any app (macOS keeps it for its own
+        // Games/Arcade overlay) while View/Menu/A/B etc. do. Left in
+        // permanently since it's cheap and useful if the mapping ever needs
+        // re-checking on different hardware; axis-only elements (sticks,
+        // d-pad position) are skipped to avoid flooding the log.
+        gamepad.valueChangedHandler = { _, element in
+            guard let button = element as? GCControllerButtonInput, button.isPressed else { return }
+            let name = element.localizedName ?? element.sfSymbolsName ?? "unnamed button"
+            debugLog("ConsoleSwitcher: button pressed: '\(name)'")
+        }
 
         // Not buttonHome: macOS reserves the Xbox/Guide button system-wide
-        // to open its own Games/Arcade overlay, so a regular app never sees
-        // that press — confirmed on hardware, not just an iOS/tvOS thing as
-        // originally assumed. The View button (left of Menu) is ordinary
-        // input games don't depend on, so it's free to repurpose here.
+        // for its own Games/Arcade overlay, and GeForce NOW separately
+        // grabs it for its own in-game menu — neither leaves anything for a
+        // third-party app to see. View+Menu held together is ordinary input
+        // neither streaming client depends on.
         gamepad.buttonOptions?.pressedChangedHandler = { [weak self] _, _, pressed in
-            guard pressed else { return }
-            DispatchQueue.main.async { self?.handleTrigger() }
+            DispatchQueue.main.async {
+                self?.viewButtonPressed = pressed
+                self?.checkChordTrigger()
+            }
+        }
+        gamepad.buttonMenu.pressedChangedHandler = { [weak self] _, _, pressed in
+            DispatchQueue.main.async {
+                self?.menuButtonPressed = pressed
+                self?.checkChordTrigger()
+            }
         }
 
         gamepad.dpad.left.pressedChangedHandler = { [weak self] _, _, pressed in
@@ -100,6 +143,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     // MARK: - Switching logic
+
+    /// Fires once when both chord buttons become pressed together, not
+    /// again until both have been released — so holding them doesn't retrigger.
+    private func checkChordTrigger() {
+        if viewButtonPressed && menuButtonPressed {
+            guard !chordAlreadyFired else { return }
+            chordAlreadyFired = true
+            handleTrigger()
+        } else {
+            chordAlreadyFired = false
+        }
+    }
 
     private func handleTrigger() {
         guard !isSwitching else { return }
@@ -140,7 +195,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func launch(_ app: GamingApp) {
         guard let url = app.appURL else {
-            NSLog("ConsoleSwitcher: \(app.rawValue) is not installed")
+            debugLog("ConsoleSwitcher: \(app.rawValue) is not installed")
             isSwitching = false
             return
         }
@@ -151,7 +206,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let completion: (NSRunningApplication?, Error?) -> Void = { [weak self] runningApp, error in
             DispatchQueue.main.async {
                 if let error {
-                    NSLog("ConsoleSwitcher: failed to launch \(app.rawValue): \(error)")
+                    debugLog("ConsoleSwitcher: failed to launch \(app.rawValue): \(error)")
+                } else {
+                    debugLog("ConsoleSwitcher: launched \(app.displayName)")
                 }
                 self?.activeApp = app
                 self?.activeRunningApp = runningApp
@@ -174,14 +231,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             completion()
             return
         }
+        debugLog("ConsoleSwitcher: terminating \(app.bundleIdentifier ?? "?")")
         app.terminate()
 
         var attempts = 0
         func poll() {
             attempts += 1
             if app.isTerminated {
+                debugLog("ConsoleSwitcher: \(app.bundleIdentifier ?? "?") quit")
                 completion()
             } else if attempts >= 20 { // ~5s
+                debugLog("ConsoleSwitcher: \(app.bundleIdentifier ?? "?") didn't quit gracefully, force-terminating")
                 app.forceTerminate()
                 completion()
             } else {
