@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.deekahy.consoleswitcher</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <!-- Adjust this path if you installed the built binary somewhere else. -->
+        <string>/usr/local/bin/ConsoleSwitcher</string>
+    </array>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/tmp/consoleswitcher.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/consoleswitcher.log</string>
+</dict>
+</plist>
