@@ -1,6 +1,6 @@
 # Console Switcher
 
-Turns a Mac hooked up to a TV into a two-game "console": press the Xbox
+Turns a Mac hooked up to a TV into a two-game "console": press the View
 button on an Xbox controller to pick Xbox Cloud Gaming (via Microsoft Edge)
 or NVIDIA GeForce NOW, and press it again to switch to the other one. The
 app that was running gets fully quit — not backgrounded — before the next
@@ -11,13 +11,13 @@ and Apple's `GameController` framework.
 
 ## How it behaves
 
-- **Nothing running, press Xbox button** → a chooser pops up: "Xbox Game
-  Pass" or "GeForce NOW". Pick one with a click, or with the controller
-  (d-pad left/right to move the highlight, A to confirm).
-- **Something already running, press Xbox button** → it quits and the other
-  one launches. No picker, since with two options a toggle is unambiguous.
+- **Nothing running, press View** → a chooser pops up: "Xbox Game Pass" or
+  "GeForce NOW". Pick one with a click, or with the controller (d-pad
+  left/right to move the highlight, A to confirm).
+- **Something already running, press View** → it quits and the other one
+  launches. No picker, since with two options a toggle is unambiguous.
 - **You quit the active app yourself** (Cmd+Q, Dock, etc.) → the app notices
-  and the next Xbox-button press shows the chooser again instead of assuming
+  and the next View-button press shows the chooser again instead of assuming
   something is still on.
 - A menu-bar icon (a gamepad glyph) gives manual "Launch X" / "Quit Active
   App" controls too, for whenever a mouse is easier than the controller.
@@ -30,15 +30,22 @@ and Apple's `GameController` framework.
   `/Applications`.
 - Xcode Command Line Tools (`xcode-select --install`) to build.
 
-## The Xbox-button caveat
+## Why the View button, not the Xbox button
 
-This is built on `GCExtendedGamepad.buttonHome`, the API's name for the
-Xbox/PS/Home button. iOS and tvOS reserve that button for the system and
-never deliver it to apps — macOS does not have that restriction, so in
-testing it reaches the app here. If your specific controller/macOS
-combination doesn't fire it, open `Sources/ConsoleSwitcher/AppDelegate.swift`
-and swap `gamepad.buttonHome` for `gamepad.buttonOptions` or
-`gamepad.buttonMenu` — it's a one-line change.
+The obvious trigger would be the Xbox/Guide button itself
+(`GCExtendedGamepad.buttonHome` in Apple's API). It doesn't work: macOS
+reserves that button system-wide to open its own Games/Arcade overlay,
+so third-party apps never see the press at all — confirmed on hardware, this
+isn't just the well-known iOS/tvOS restriction. There's no public API to
+override that reservation.
+
+The View button (`buttonOptions`, left of Menu) is ordinary input that
+nothing reserves and that neither Xbox Cloud Gaming nor GeForce NOW depend
+on mid-game, so it's free to repurpose. If you'd rather use a different
+button, change `gamepad.buttonOptions` in
+`Sources/ConsoleSwitcher/AppDelegate.swift` — `buttonMenu` (the Start-style
+button) is the other reasonable option, though some games do use it for
+their own pause menu.
 
 ## Build & run
 

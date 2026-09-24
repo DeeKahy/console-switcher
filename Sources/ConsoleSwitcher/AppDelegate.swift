@@ -75,10 +75,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func configure(_ controller: GCController) {
         guard let gamepad = controller.extendedGamepad else { return }
 
-        // The Xbox/Guide button. iOS and tvOS reserve this for the system,
-        // but macOS does not, so it reaches the app here. If your controller
-        // never fires this handler, swap it for buttonOptions or buttonMenu.
-        gamepad.buttonHome?.pressedChangedHandler = { [weak self] _, _, pressed in
+        // Not buttonHome: macOS reserves the Xbox/Guide button system-wide
+        // to open its own Games/Arcade overlay, so a regular app never sees
+        // that press — confirmed on hardware, not just an iOS/tvOS thing as
+        // originally assumed. The View button (left of Menu) is ordinary
+        // input games don't depend on, so it's free to repurpose here.
+        gamepad.buttonOptions?.pressedChangedHandler = { [weak self] _, _, pressed in
             guard pressed else { return }
             DispatchQueue.main.async { self?.handleTrigger() }
         }
